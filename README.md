@@ -1,23 +1,18 @@
 # This repo
 
 I'm working on a buildroot guide, and multiple buildroot-based systems.
-One of the is the system I planned for the L1T devember
-(https://forum.level1techs.com/t/lua-libraries-for-crazy-bootable-devember-challenge/162399/3).
-While that project won't be in this directory, this repo is intended as a starting point for it.
 
-Tho other buildroot-system I planned is a simple graphical "bootloader"
-that uses the `kexec()`-facilities to boot another Linux kernel.
-That is currently in this repo, mostly in the `rootfs_overlay/usr/bootmenu` directory.
+Currently in this repo is a project called "bootmenu". It's a buildroot-
+based minimal kernel+initramfs that will provide a graphical menu to load
+other kernels via the kexec() mechanism.
 
-In the future, this repo will be split into the seperate `bootmenu` part, and
-the buildroot guide.
+I'm writing this as a guide for myself and others mostly as a starting point
+for simple buildroot-based projects and hacks. It is intended as a copy-paste
+source, with links to the proper buildroot documentation for reference.
 
-I'd still be glad for every spelling mistake etc. you can find, I'm not a native
-speaker.
+It is assumed the reader is somewhat familiar with Linux.
 
 
-
-# Buildroot basic guide
 
 # What is buildroot?
 
@@ -26,100 +21,152 @@ From the buildroot manual:
     Buildroot is a tool that simplifies and automates the process of building
     a complete Linux system for an embedded system, using cross-compilation.
 
-In other words: Buildroot is software that compiles a lot of software into a
-system image. Buildroot also can use or even generate a cross compilation
-toolchain, and build for foreign architectures(cross-compilation).
-That is most useful for embedded systems, but can also be used for desktop
-systems, because nowadays buildroot has a lot of support for desktop/server
-systems(they make great light-weight containers).
+As the name suggest, it's a compilation of makefiles and tools that make
+compiling a cross-toolchain and a Linux userland based on that cross-toolchain
+easy("build" a "root" filesystem).
 
-Keep in mind however that buildroot has no run-time package support. While
-buildroot has a notion of "packets" at compile-time, the generated image has
-no package manager or package metadata etc. installed(unless provided externally).
+It also supports a lot of other functions, like compiling a Linux kernel and combining it with and
+initrd, generating .iso images, etc.
+
+It is intended for embedded systems(e.g. OpenWRT is based on it), but because
+it's very flexible, it can be used for almost anything(from embedded systems,
+to lightweight application containers, and even fully-blown desktop systems).
+
+There are a lot of packages in the buildroot build system. These packages
+are build into the generated root filesystem. There is no runtime package
+manager, unless provided by the user.
 
 
 
-# What this tutorial explains
+# What this tutorial covers
 
-First, we will use buildroot to generate a more or less default filesystem image.
-We show that filesystem image booting in QEMU.
-Then we'll add compiling a kernel to our configuration, learn about configuring
-that kernel(including integrating the kernel configuration properly into the
-buildroot build system), and append an initrd to the kernel for an
-all-in-one bootable kernel image. We'll also show using buildroot to generate
-and .iso image that uses grub to boot the generated image.
-We will add an external filesystem overlay, and also use the generated and
-exported buildroot toolchain to cross-compile a simple C hello world on the host,
-and store the generated binary in the filesystem overlay.
-All configuration data will be stores separately.
+In this tutorial, we will use buildroot to build several example systems, and
+boot them. This is not a reference for buildroot. It's intended as a
+beginners-guide for people that want to use buildroot for a project or a hack
+(using this tutorial as a copy-paste source is encouraged).
 
-As a final example, I will walk you through a simple application of this:
-I will build a simple kexec-based graphical "bootloader".
+Basic familiarity with Linux and shell tools is assumed. No root privileges should be required.
 
-This tutorial is not intended as a reference for buildroot. Buildroot has an
-excellent manual(https://buildroot.org/downloads/manual/manual.html),
-and I'm not experienced enough to even do that.
-It's intended to be a beginners getting-started guide, and maybe a good
-copy-paste command source.
+The first system image we build is just the default buildroot configuration.
+We will test it using proot, as it is not bootable.
+
+The we will learn to customize the generated system a bit, by compiling in a
+few extra packages, including a Linux kernel. We will use a buildroot
+option to append the generated system as an initrd to the kernel.
+The final image can be booted using QEMU's -kernel option, or on real hardware
+using an grub2 entry.
+
+Next, It will explain how to store project-specific configuration outside of
+the buildroot tree, and show how to use an overlay directory and post-build
+scripts to customize the generated image further. Also covered is using the
+generated buildroot toolchain to compile projects not integrated into
+buildroot(using my library lua-db as an example).
+
+Last will be an overview of what we've covered by reviewing my project "bootmenu".
+It's written in LuaJIT, and makes use of every feature covered here(This is
+no accident; This guide was made in the process of creating the bootmenu project)
 
 
 
 # Requirements
 (TODO: get a list of debian/common distribution package names)
 
+	build-essentials proot
+
 See https://buildroot.org/downloads/manual/manual.html#requirement
 
+You might want a reasonably fast multi-threaded CPU, lots of RAM, and a fast
+SSD to speed up the build process if you're adding copious amounts of extra
+packages.
 
 
-# First steps
 
-After installing the requirements, download a buildroot release and extract it
-to a directory. For this tutorial, we'll create the directory `~/work`, and
-download buildroot there:
+# Preparation
+
+First order of business is preparation. Let's create a directory for this
+tutorial, and download a buildroot release tarball into it. I'll be using the
+latest stable release as of the release date of this tutorial(buildroot 2020.08.1).
 
     mkdir ~/work
     cd ~/work
     wget https://buildroot.org/downloads/buildroot-2020.08.1.tar.gz
     tar -xvf buildroot-2020.08.1.tar.gz
 
-We can start configuring a simple system right now:
+We're ready now to configure and build our first buildroot system!
 
-    cd buildroot-2020.08.1/
+
+
+# First system
+
+## Configuration
+
+We can start configuring a simple system right now. Buildroot uses a
+Kconfig-based system for configuration like the Linux kernel. If you're familiar
+with building the Linux kernel, the graphical configuration interface should
+be familiar:
+
+    cd ~/work/buildroot-2020.08.1/
     make menuconfig
 
 This will open the ncurses-based configuration menu.
-For now, just change `Target Options -> Target Architecture` to x86_64.
+
 You can navigate the menu using the arrow keys, enter and escape.
-Make sure to save your changes when exiting.
+For now, we will just change `Target Options -> Target Architecture` to x86_64.
 
-We're ready for compiling now.
+Make sure to save your changes when exiting(use the escape key until
+you're asked to save changes, then press enter).
+
+And that's it. We're ready for compilation now!
 
 
+## Build
 
-## First build
+Now follows the process of compiling the buildroot sources into a system image.
+Fortunately, buildroot makes this super easy:
 
-It's as easy as running:
+	cd ~/work/buildroot-2020.08.1/
+    time make
 
-    make
+This will start building a cross-toolchain, then use that cross-toolchain to
+compile all default buildroot packages(busybox, etc.), and include them in the
+generated system image(in this case, a .tar that contains the root file system).
 
-In the `~/work/buildroot-2020.08.1/` directory.
 On my system(Ryzen 2600, 16GB RAM, generic SSD) this took about 10 minutes.
 
+The generated tarball is in `~/work/buildroot-2020.08.1/output/images`.
+For me, it was about 2MB in size.
+
+
+
+### Top-level parallel builds
+
 *Do not specify a top-level parallel build option like `-jN`!*
-Buildroot does not yet support top-level parallel builds!
+
+Buildroot does not currently support top-level parallel builds!
 (It's experimental and requires configuration, see:
 https://buildroot.org/downloads/manual/manual.html#top-level-parallel-build)
 
-This will first build a GCC-based toolchain for compiling for the target
-architecture(In this case x86_64), then build a basic filesystem image
-by building the basic packages using the new toolchain. This includes a
-libc(By default this is uclibc. That's one of the reasons buildroot always
-builds a toolchain, even for x86_64).
 
-Also included is busybox, a minimal implementation of the common system
-utilities(ls, grep, etc.). It's way smaller than the standard coreutils.
 
-The filesystem should now be composed of:
+## Testing
+
+We only have a .tar right now, and that is not bootable. We can test it using
+proot. proot is a tool that allows you to pretend to Linux programs that you
+have a different root filesystem than you actually have(Like chroot or fakeroot,
+but does not require root). It can also pretend you're root, even when you're
+not(It overloads functions like open() using the dynamic linker).
+
+	mkdir ~/work/proot
+	cd ~/work/proot
+	cp ../buildroot-2020.08.1/output/images/rootfs.tar .
+	proot -0 tar xpvf rootfs.tar --xattrs-include='*.*' --numeric-owner
+	proot -S .
+
+You're now in a buildroot-based shell! This system does not even use your system
+LibC. Let's explore the generated filesystem a little:
+
+(TODO: write filesystem exploration)
+.. so the filesystem is composed of:
 
  * The target root skeleton
    * This includes static default configuration for the busybox-based system
@@ -131,13 +178,6 @@ The filesystem should now be composed of:
  * All compiled binaries from buildroot packages
    * This would include busybox, plus any other packages you select.
      * basically everything in `/bin`, `/usr/bin`, `/usr/lib` etc.
-
-The generated filesystem in the default image is a tarball at:
-
-    ~/work/buildroot-2020.08.1/output/images/rootfs.tar
-
-For me, that tarball was about 2MB in the default configuration.
-
 
 
 ## Saving Buildroot configuration
