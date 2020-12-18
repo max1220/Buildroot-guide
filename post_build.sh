@@ -1,5 +1,7 @@
 #!/bin/bash
-# Goto project base directory(~/work/)
+# This script gets called by the buildroot makefile.
+
+# Goto project base directory
 cd ${BASE_DIR}/../../
 
 # Cross-compile all applications

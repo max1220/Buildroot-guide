@@ -16,12 +16,9 @@ It is assumed the reader is somewhat familiar with Linux.
 
 # This version
 
-This exact version of the repo contains some experiments, and associated code.
-It won't be used in the final repo, but it's a lot of code, and some of it can
-be useful in other context. For example, it contains a few pure-lua + ffi
-libraries with no external dependencies(See the bootmenu/lua) directory,
-including a graphics library with framebuffer bindings, tileset library, and
-bitmap font library.
+This exact version of the repo contains a clean project directory, containing
+only minimal, project-independent configuration. It's intended to be used as a
+starting point for other projects.
 
 
 

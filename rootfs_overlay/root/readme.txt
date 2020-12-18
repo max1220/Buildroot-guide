@@ -1,1 +1,1 @@
-Welcome to the bootmenu initramfs!
+Welcome to the initramfs!
